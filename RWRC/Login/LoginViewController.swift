@@ -32,6 +32,8 @@
 
 import UIKit
 import FirebaseAuth
+import GoogleSignIn
+import Firebase
 
 final class LoginViewController: UIViewController {
   @IBOutlet private var actionButton: UIButton!
@@ -40,40 +42,74 @@ final class LoginViewController: UIViewController {
   @IBOutlet private var actionButtonBackingView: UIView!
   @IBOutlet private var bottomConstraint: NSLayoutConstraint!
 
+  
+  
   override var preferredStatusBarStyle: UIStatusBarStyle {
     return .lightContent
   }
-
+  
   override func viewDidLoad() {
     super.viewDidLoad()
 
     fieldBackingView.smoothRoundCorners(to: 8)
     actionButtonBackingView.smoothRoundCorners(to: actionButtonBackingView.bounds.height / 2)
-
+    
+    displayNameField.placeholder = "Your name here..."
+    
     displayNameField.tintColor = .primary
     displayNameField.addTarget(
       self,
       action: #selector(textFieldDidReturn),
       for: .primaryActionTriggered)
-
+    
     registerForKeyboardNotifications()
   }
-
+  
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
-
+    
     displayNameField.becomeFirstResponder()
   }
-
+  
   // MARK: - Actions
   @IBAction private func actionButtonPressed() {
     signIn()
-  }
+    guard let clientID = FirebaseApp.app()?.options.clientID else { return }
 
+    // Create Google Sign In configuration object.
+    let config = GIDConfiguration(clientID: clientID)
+
+    // Start the sign in flow!
+    GIDSignIn.sharedInstance.signIn(with: config, presenting: self) { [unowned self] user, error in
+
+      if let error = error {
+        // ...
+        return
+      }
+
+      guard
+        let authentication = user?.authentication,
+        let idToken = authentication.idToken
+      else {
+        return
+      }
+
+      let credential = GoogleAuthProvider.credential(withIDToken: idToken,
+                                                     accessToken: authentication.accessToken)
+
+        Auth.auth().signIn(with: credential) { authResult, error in
+            if let error = error {
+              return
+            }
+            //performSegue(withIdentifier: "toDetailVC", sender: self)
+        }
+    }
+  }
+  
   @objc private func textFieldDidReturn() {
     signIn()
   }
-
+  
   // MARK: - Helpers
   private func registerForKeyboardNotifications() {
     NotificationCenter.default.addObserver(
@@ -87,7 +123,7 @@ final class LoginViewController: UIViewController {
       name: UIResponder.keyboardWillHideNotification,
       object: nil)
   }
-
+  
   private func signIn() {
     guard
       let name = displayNameField.text,
@@ -96,19 +132,19 @@ final class LoginViewController: UIViewController {
       showMissingNameAlert()
       return
     }
-
+    
     displayNameField.resignFirstResponder()
-
+    
     AppSettings.displayName = name
     Auth.auth().signInAnonymously()
   }
-
+  
   private func showMissingNameAlert() {
     let alertController = UIAlertController(
       title: "Display Name Required",
       message: "Please enter a display name.",
       preferredStyle: .alert)
-
+    
     let action = UIAlertAction(
       title: "Okay",
       style: .default) { _ in
@@ -117,7 +153,7 @@ final class LoginViewController: UIViewController {
     alertController.addAction(action)
     present(alertController, animated: true)
   }
-
+  
   // MARK: - Notifications
   @objc private func keyboardWillShow(_ notification: Notification) {
     guard
@@ -128,10 +164,10 @@ final class LoginViewController: UIViewController {
     else {
       return
     }
-
+    
     let options = UIView.AnimationOptions(rawValue: keyboardAnimationCurve.uintValue << 16)
     bottomConstraint.constant = keyboardHeight + 20
-
+    
     UIView.animate(
       withDuration: keyboardAnimationDuration.doubleValue,
       delay: 0,
@@ -139,7 +175,7 @@ final class LoginViewController: UIViewController {
       self.view.layoutIfNeeded()
     }
   }
-
+  
   @objc private func keyboardWillHide(_ notification: Notification) {
     guard
       let userInfo = notification.userInfo,
@@ -148,10 +184,10 @@ final class LoginViewController: UIViewController {
     else {
       return
     }
-
+    
     let options = UIView.AnimationOptions(rawValue: keyboardAnimationCurve.uintValue << 16)
     bottomConstraint.constant = 20
-
+    
     UIView.animate(
       withDuration: keyboardAnimationDuration.doubleValue,
       delay: 0,
